@@ -1,0 +1,1518 @@
+// setup
+init();
+
+/*** start end required ***/
+
+//global variables that will hold inputs from "user-input" of GUI
+global string $thisWindow;
+
+global string $road_MailboxCheck;
+global string $road_LightpostCheck;
+global string $road_TreeCheck;
+global string $road_DirRadio;
+
+global string $basePlane_Size;
+
+global string $building_SkyscraperCheck;
+global string $building_ApartmentCheck;
+global string $building_GovernmentCheck;
+global string $building_MidLevelOneCheck;
+global string $building_MidLevelTwoCheck;
+global string $building_BuildHeightSlide;
+global string $building_BuildDensitySlide;
+
+global string $intersection_StreetlightCheck;
+
+global string $turnRoad_LightpostCheck;
+
+//names of displayLayers
+global string $groundDisplayLayer;
+global string $PiecesDisplayLayer;
+global string $lightsDisplayLayer;
+
+//global vars for keeping track of objects
+global string $groundPlaneName;    //because I only want one ground at a time
+global string $groundPlaneName2;   //required polyname to required to set some attributes
+
+global float $buildPos[];     //used to keep track of where pieces have already been put
+global int $nsCounter;      //a counter that keep sall namespaces together
+
+//materials
+global string $blueGlass;
+global string $greenGlass;
+global string $concrete;
+global string $redBrick;
+global string $brownBrick;
+global string $asphalt;
+
+
+/*
+* The initiation function that resets an old scene and starts a new one with appropriate viewing conditions
+* @return: none;
+*/
+proc init()
+{
+ file -f -new;
+ 
+ global int $nsCounter;
+ global float $buildPos[];
+ 
+ global string $groundDisplayLayer;
+ global string $PiecesDisplayLayer;
+ global string $lightsDisplayLayer;
+
+ createShaders();
+
+ //now put into smooth shade mode and wireframe on shaded automatically
+ $currentPanel = `getPanel -withFocus`;
+ string $panelType = `getPanel -to $currentPanel`;
+ if ($panelType ==  "modelPanel")
+ {
+  modelEditor -wos true -e -da smoothShaded $currentPanel;
+ }
+ 
+ createGUI();
+ 
+ $groundDisplayLayer = "groundPlaneLayer";
+ $PiecesDisplayLayer = "pieceLayer";
+ $lightsDisplayLayer = "lightsLayer";
+ 
+ //create display layers ( will make it easier to set selection filters on objects later )
+ createDisplayLayer -name $groundDisplayLayer -number 1 -empty;
+ createDisplayLayer -name $PiecesDisplayLayer -number 1 -empty;
+ createDisplayLayer -name $lightsDisplayLayer -number 1 -empty;
+ 
+ $nsCounter = 0;
+ //now to clear any global arrays in memory
+ clear $buildPos;
+}
+
+/*
+* Create all GUi and associate with global input variables
+* @return: none;
+*/
+proc createGUI()
+{
+ //reinitializing global vars so I can see they are in scope here and can be set 
+ 
+ global string $thisWindow;
+ 
+ global string $basePlane_Size;
+ 
+ global string $road_MailboxCheck;
+ global string $road_LightpostCheck;
+ global string $road_TreeCheck;
+ global string $road_DirRadio;
+ 
+ global string $building_SkyscraperCheck;
+ global string $building_ApartmentCheck;
+ global string $building_GovernmentCheck;
+ global string $building_MidLevelOneCheck;
+ global string $building_MidLevelTwoCheck;
+ global string $building_BuildHeightSlide;
+ 
+ global string $intersection_StreetlightCheck;
+ 
+ global string $turnRoad_LightpostCheck;
+
+ //for when running the same script (so that two of the same windows are not created)
+ if(`window -exists $thisWindow`)
+ {
+  deleteUI -window $thisWindow;
+ }
+
+ //creating GUI
+ $thisWindow = `window -title "Term Project - Downtown, no finer place for sure!" -menuBar true -sizeable false -widthHeight 310 620`;
+
+ menu -label "File";
+ menuItem -label "new scene" -command "init()";
+ 
+ menu -label "Edit";
+ menuItem -label "Delete Build Piece" -command "deletePiece()";
+ menuItem -label "Rotate Build Piece Right" -command "rotatePiece( 90 )";
+ menuItem -label "Rotate Build Piece Left" -command "rotatePiece( -90 )";
+ 
+ menu -label "Recommended Select Modes";
+ menuItem -label "Ground Face Select" -command "tglSelectMode( 0 )";
+ menuItem -label "Build Piece Select" -command "tglSelectMode( 1 )";
+ 
+ columnLayout;
+ 
+  frameLayout -collapsable false -label "Transform Controls" -width 300;
+   rowColumnLayout -nc 2 -cw 1 150 -cw 2 150;
+    button -label "Rotate Build Piece Right" -command "rotatePiece( 90 )" -width 150 -height 50 ;                 
+    button -label "Rotate Build Piece Left" -command "rotatePiece( -90 )" -width 150  -height 50;
+    setParent ..; 
+  setParent ..;
+  
+  frameLayout -collapsable true -label "Create Base Plane" -width 300;
+   rowColumnLayout -nc 1 -cw 1 300;
+    
+    $basePlane_Size =    `intSliderGrp -label "Size of Ground Plane" -field true
+             -cl3 "left" "left" "left"
+             -cw3 100 30 170
+             -minValue 3 -maxValue 50
+             -fieldMinValue -100 -fieldMaxValue 100
+             -value 3
+             -changeCommand "refreshPlane()"
+             -dragCommand "refreshPlane()"`; 
+                     
+    button -label "create base plane" -command "createBasePlane()" -width 20 -height 25;
+    setParent ..; 
+  setParent ..;
+  
+  frameLayout -collapsable true -label "Buildings" -width 300;
+    rowColumnLayout -nc 1 -cw 1 300;
+    $building_SkyscraperCheck =  `checkBox -value true -label "skyscrapers" -align "left"`;
+    $building_ApartmentCheck =  `checkBox -value true -label "apartments" -align "left"`;
+    $building_GovernmentCheck =  `checkBox -value true -label "government" -align "left"`;
+    $building_MidLevelOneCheck = `checkBox -value true -label "mid-level 1" -align "left"`;
+    $building_MidLevelTwoCheck = `checkBox -value true -label "mid-level 2" -align "left"`;
+    $building_BuildHeightSlide = `intSliderGrp -label "Average Height Level" -field true
+             -cl3 "left" "left" "left"
+             -cw3 100 30 170
+             -minValue 1 -maxValue 30
+             -fieldMinValue -100 -fieldMaxValue 100
+             -value 20`;        
+    button -label "create buildings" -command "createBuildings()";  
+   setParent ..;
+  setParent ..; 
+  
+  frameLayout -collapsable true -label "Road" -width 300;
+   rowColumnLayout -nc 1 -cw 1 300;
+    $road_LightpostCheck = `checkBox -value true -label "street lights" -align "left"`;
+    //$road_MailboxCheck = `checkBox -label "mailboxes" -align "left"`;
+    //$road_TreesCheck=  `checkBox -label "trees" -align "left"`;
+    $road_DirRadio = `radioButtonGrp -numberOfRadioButtons 2
+     -sl 1 -cw 1 60 -cw 2 40 -cw 3 50
+     -label "direction"
+     -labelArray2 "x" "z"`;
+    button -label "create road" -command "createRoad()" -width 20;
+    setParent ..; 
+  setParent ..;
+  
+  frameLayout -collapsable true -label "Right Road Turn" -width 300;
+   rowColumnLayout -nc 1 -cw 1 300;
+    $turnRoad_LightpostCheck = `checkBox -value true -label "street lights" -align "left"`;
+    button -label "create turning road" -command "createRightRoad()";  
+   setParent ..;
+  setParent ..;
+  
+  frameLayout -collapsable true -label "Intersection" -width 300;
+   rowColumnLayout -nc 1 -cw 1 300;
+    $intersection_StreetlightCheck = `checkBox -value true -label "traffic lights" -align "left"`;
+    button -label "create intersection" -command "createIntersection()";  
+   setParent ..;
+  setParent ..;
+ 
+ showWindow $thisWindow;
+}
+
+/////////////////////////////////////////////////
+///////////// begin primary functions /////////
+/////////////////////////////////////////////////
+
+/*
+* Creates the base ground terrain which is used to select where to place build pieces such as roads and buildings
+* @return: none;
+*/
+proc createBasePlane()
+{
+ global string $groundDisplayLayer;
+ global string $groundPlaneName = "groundPlane";
+ global string $groundPlaneName2;
+
+ if ( `objExists $groundPlaneName` )
+ {
+  error "Sorry, only one ground can be created at a time";
+ }
+ else
+ {
+  string $polyPlaneNames[] = `polyPlane -n $groundPlaneName`;
+  $groundPlaneName2 = $polyPlaneNames[1];
+  editDisplayLayerMembers $groundDisplayLayer $polyPlaneNames[0]; //add ground plane to display layer
+   
+  tglSelectMode( 0 ); //set select mode to face selction only ( for convienence )
+  refreshPlane();
+ }
+}
+
+/*
+* Refreshes the ground terrain interactively as sliders in the GUi and manipulated. This is so the plane can be resized but each face stays in the same place.
+* @return: none;
+*/
+proc refreshPlane()
+{
+ global string $basePlane_SDX;
+ global string $basePlane_SDZ;
+ global string $basePlane_Width;
+ global string $basePlane_Depth;
+ 
+ global string $basePlane_Size;
+
+ global string $groundPlaneName;
+ global string $groundPlaneName2;
+
+ if ( `objExists $groundPlaneName` )
+ {
+  int $sx = `intSliderGrp -q -value $basePlane_Size`;
+  int $sx = $sx * 2;
+  int $sz = $sx;
+  int $width = $sx * 4;
+  int $height = $sx * 4;
+  
+  setAttr ($groundPlaneName2 + ".subdivisionsWidth") ($sx);
+  setAttr ($groundPlaneName2 + ".subdivisionsHeight") ($sz);
+  setAttr ($groundPlaneName2 + ".width")    ($width);
+  setAttr ($groundPlaneName2 + ".height")    ($height);
+ }
+}
+
+/*
+* Create a straight road piece ( with or without streetlights according to GUi)
+* @return: none;
+*/
+proc createRoad()
+{
+ global string $road_DirRadio;
+ global string $road_LightpostCheck;
+ global string $PiecesDisplayLayer;
+
+ int $dir = `radioButtonGrp -q -select $road_DirRadio`;
+ float $allFacePos[] = returnSelectedFacePositions();
+
+ int $numItems = size($allFacePos);
+ float $buildPos[3];
+ 
+ int $i;
+ for ($i = 0; $i < $numItems; $i+=3)
+ {
+  $buildPos[0] = $allFacePos[$i];
+  $buildPos[1] = $allFacePos[$i + 1];
+  $buildPos[2] = $allFacePos[$i + 2];
+  
+  if ( isUsedSpot( $buildPos ) )
+  {
+   warning "One or more of the faces you chose already have been built upon";
+  }
+  else
+  {
+   addBuildPoint( $buildPos );
+  
+   //base ground
+   string $baseGround[] = `polyCreateFacet -p -2.0 0.0 -2.0 -p -2.0 0.0 2.0 -p 2.0 0.0 2.0 -p 2.0 0.0 -2.0`;  //base ground level
+   move -a $buildPos[0] $buildPos[1] $buildPos[2] $baseGround[0];
+   polyExtrudeFacet -kft true -ltz 0.24 -ls 1.0 1.0 1.0 $baseGround[0];
+   
+   //z-axis
+   
+   //curb
+   polySplitRing -sma 180 -wt 0.25 ($baseGround[0] + ".e[0]") ($baseGround[0] + ".e[2]") ($baseGround[0] + ".e[6]") ($baseGround[0] + ".e[10]");
+   polySplitRing -sma 180 -wt 0.3333333 ($baseGround[0] + ".e[2]") ($baseGround[0] + ".e[10]") ($baseGround[0] + ".e[12]") ($baseGround[0] + ".e[13]");
+   polySplitRing -sma 180 -wt 0.8 ($baseGround[0] + ".e[0]") ($baseGround[0] + ".e[6]") ($baseGround[0] + ".e[15]") ($baseGround[0] + ".e[17]");
+   polySplitRing -sma 180 -wt 0.8 ($baseGround[0] + ".e[2]") ($baseGround[0] + ".e[10]") ($baseGround[0] + ".e[23]") ($baseGround[0] + ".e[25]");
+   
+   //sidewalk
+   polySplitRing -sma 180 -wt 0.25 ($baseGround[0] + ".e[1]") ($baseGround[0] + ".e[3]") ($baseGround[0] + ".e[8]") ($baseGround[0] + ".e[11]") ($baseGround[0] + ".e[16]") ($baseGround[0] + ".e[19]") ($baseGround[0] + ".e[24]") ($baseGround[0] + ".e[27]") ($baseGround[0] + ".e[32]") ($baseGround[0] + ".e[35]") ($baseGround[0] + ".e[40]") ($baseGround[0] + ".e[43]");
+   polySplitRing -sma 180 -wt 0.3333333 ($baseGround[0] + ".e[3]") ($baseGround[0] + ".e[11]") ($baseGround[0] + ".e[19]") ($baseGround[0] + ".e[24]") ($baseGround[0] + ".e[35]") ($baseGround[0] + ".e[40]") ($baseGround[0] + ".e[44:45]") ($baseGround[0] + ".e[51]") ($baseGround[0] + ".e[53]") ($baseGround[0] + ".e[63]") ($baseGround[0] + ".e[65]");
+   polySplitRing -sma 180 -wt 0.5 ($baseGround[0] + ".e[44:45]") ($baseGround[0] + ".e[51]") ($baseGround[0] + ".e[53]") ($baseGround[0] + ".e[63]") ($baseGround[0] + ".e[65]") ($baseGround[0] + ".e[68:69]") ($baseGround[0] + ".e[75]") ($baseGround[0] + ".e[77]") ($baseGround[0] + ".e[87]") ($baseGround[0] + ".e[89]");
+   
+   polyExtrudeFacet -kft false -ltz 0.06 -ls 0.95 0.95 0.95 ($baseGround[0] + ".f[0]") ($baseGround[0] + ".f[7]") ($baseGround[0] + ".f[23]") ($baseGround[0] + ".f[27]") ($baseGround[0] + ".f[35]") ($baseGround[0] + ".f[39]") ($baseGround[0] + ".f[47]") ($baseGround[0] + ".f[51]");
+   polyExtrudeFacet -kft true -ltz 0.06 -ls 1.0 1.0 1.0 ($baseGround[0] + ".f[15]") ($baseGround[0] + ".f[19]") ($baseGround[0] + ".f[24]") ($baseGround[0] + ".f[26]") ($baseGround[0] + ".f[36]") ($baseGround[0] + ".f[38]") ($baseGround[0] + ".f[48]") ($baseGround[0] + ".f[50]");
+   
+   int $wantLights = `checkBox -q -value $road_LightpostCheck`;
+   if ( $wantLights )
+   {
+    //addstreetlights ( if checked )
+    string $streeLight[];
+    $streeLight = createLightPost();
+    setAttr ($streeLight[0] + ".translateX") $buildPos[0];
+    setAttr ($streeLight[0] + ".translateZ") ($buildPos[2] + 1.8);
+    setAttr ($streeLight[0] + ".rotateY") 0;
+    $baseGround = `polyUnite $baseGround[0] $streeLight[0] `;
+    
+    $streeLight = createLightPost();
+    setAttr ($streeLight[0] + ".translateX") $buildPos[0];
+    setAttr ($streeLight[0] + ".translateZ") ($buildPos[2] - 1.8);
+    setAttr ($streeLight[0] + ".rotateY") 180;
+    $baseGround = `polyUnite $baseGround[0] $streeLight[0] `;
+   }
+   
+   delete -ch $baseGround[0];
+   makeIdentity -apply true -t 1 -r 1 -s 1 -n 0 $baseGround[0];
+   move -a $buildPos[0] $buildPos[1] $buildPos[2] ($baseGround[0] + ".scalePivot") ($baseGround[0] + ".rotatePivot") ;
+   
+   if ( $dir == 2 )
+   {
+    //to align to x-axis
+    setAttr ($baseGround[0] + ".rotateY") 90;
+   }
+   
+   editDisplayLayerMembers $PiecesDisplayLayer $baseGround[0]; //add build piece to display layer
+   tglSelectMode( 0 ); //set select mode to face selction only ( for convienence )
+  }
+ }
+}
+
+/*
+* Create a four-way intersection with or without traffic lights
+* @return: none;
+*/
+proc createIntersection()
+{
+ global string $PiecesDisplayLayer;
+ global string $intersection_StreetlightCheck;
+
+ float $allFacePos[] = returnSelectedFacePositions();
+
+ int $numItems = size($allFacePos);
+ float $buildPos[3];
+ 
+ int $i;
+ for ($i = 0; $i < $numItems; $i+=3)
+ {
+  $buildPos[0] = $allFacePos[$i];
+  $buildPos[1] = $allFacePos[$i + 1];
+  $buildPos[2] = $allFacePos[$i + 2];
+  
+  if ( isUsedSpot( $buildPos ) )
+  {
+   warning "One or more of the faces you chose already have been built upon";
+  }
+  else
+  {
+   addBuildPoint( $buildPos );
+  
+   //base ground
+   string $baseGround[] = `polyCreateFacet -p -2.0 0.0 -2.0 -p -2.0 0.0 2.0 -p 2.0 0.0 2.0 -p 2.0 0.0 -2.0`;  //base ground level
+   move -a $buildPos[0] $buildPos[1] $buildPos[2] $baseGround[0];
+   polyExtrudeFacet -kft true -ltz 0.24 -ls 1.0 1.0 1.0 $baseGround[0];
+   
+   //z-axis
+   
+   //curb
+   polySplitRing -sma 180 -wt 0.25 ($baseGround[0] + ".e[0]") ($baseGround[0] + ".e[2]") ($baseGround[0] + ".e[6]") ($baseGround[0] + ".e[10]");
+   polySplitRing -sma 180 -wt 0.3333333 ($baseGround[0] + ".e[2]") ($baseGround[0] + ".e[10]") ($baseGround[0] + ".e[12]") ($baseGround[0] + ".e[13]");
+   polySplitRing -sma 180 -wt 0.8 ($baseGround[0] + ".e[0]") ($baseGround[0] + ".e[6]") ($baseGround[0] + ".e[15]") ($baseGround[0] + ".e[17]");
+   polySplitRing -sma 180 -wt 0.8 ($baseGround[0] + ".e[2]") ($baseGround[0] + ".e[10]") ($baseGround[0] + ".e[23]") ($baseGround[0] + ".e[25]");
+   
+   //sidewalk
+   polySplitRing -sma 180 -wt 0.25 ($baseGround[0] + ".e[1]") ($baseGround[0] + ".e[3]") ($baseGround[0] + ".e[8]") ($baseGround[0] + ".e[11]") ($baseGround[0] + ".e[16]") ($baseGround[0] + ".e[19]") ($baseGround[0] + ".e[24]") ($baseGround[0] + ".e[27]") ($baseGround[0] + ".e[32]") ($baseGround[0] + ".e[35]") ($baseGround[0] + ".e[40]") ($baseGround[0] + ".e[43]");
+   polySplitRing -sma 180 -wt 0.3333333 ($baseGround[0] + ".e[3]") ($baseGround[0] + ".e[11]") ($baseGround[0] + ".e[19]") ($baseGround[0] + ".e[24]") ($baseGround[0] + ".e[35]") ($baseGround[0] + ".e[40]") ($baseGround[0] + ".e[44:45]") ($baseGround[0] + ".e[51]") ($baseGround[0] + ".e[53]") ($baseGround[0] + ".e[63]") ($baseGround[0] + ".e[65]");
+   polySplitRing -sma 180 -wt 0.5 ($baseGround[0] + ".e[44:45]") ($baseGround[0] + ".e[51]") ($baseGround[0] + ".e[53]") ($baseGround[0] + ".e[63]") ($baseGround[0] + ".e[65]") ($baseGround[0] + ".e[68:69]") ($baseGround[0] + ".e[75]") ($baseGround[0] + ".e[77]") ($baseGround[0] + ".e[87]") ($baseGround[0] + ".e[89]");
+   
+   //second curb
+   polySplitRing -sma 180 -wt 0.8 ($baseGround[0] + ".e[1]") ($baseGround[0] + ".e[8]") ($baseGround[0] + ".e[16]") ($baseGround[0] + ".e[27]") ($baseGround[0] + ".e[32]") ($baseGround[0] + ".e[43]") ($baseGround[0] + ".e[47]") ($baseGround[0] + ".e[49]") ($baseGround[0] + ".e[55]") ($baseGround[0] + ".e[57]") ($baseGround[0] + ".e[59]") ($baseGround[0] + ".e[61]");
+   polySplitRing -sma 180 -wt 0.8 ($baseGround[0] + ".e[3]") ($baseGround[0] + ".e[11]") ($baseGround[0] + ".e[19]") ($baseGround[0] + ".e[24]") ($baseGround[0] + ".e[35]") ($baseGround[0] + ".e[40]") ($baseGround[0] + ".e[71]") ($baseGround[0] + ".e[73]") ($baseGround[0] + ".e[79]") ($baseGround[0] + ".e[81]") ($baseGround[0] + ".e[83]") ($baseGround[0] + ".e[85]");
+   
+   polyExtrudeFacet -kft false -ltz 0.06 -ls 0.95 0.95 0.95 ($baseGround[0] + ".f[0]") ($baseGround[0] + ".f[7]") ($baseGround[0] + ".f[23]") ($baseGround[0] + ".f[27]");
+   polyExtrudeFacet -kft true -ltz 0.06 -ls 1.0 1.0 1.0 ($baseGround[0] + ".f[15]") ($baseGround[0] + ".f[19]") ($baseGround[0] + ".f[24]") ($baseGround[0] + ".f[26]") ($baseGround[0] + ".f[59:60]") ($baseGround[0] + ".f[62:63]") ($baseGround[0] + ".f[71:72]") ($baseGround[0] + ".f[74:75]");
+   
+   int $wantLights = `checkBox -q -value $intersection_StreetlightCheck`;
+   if ( $wantLights )
+   {
+    //add traffic lights ( if checked )
+    string $streeLight[];
+    $streeLight = createTrafficLight();
+    setAttr ($streeLight[0] + ".translateX") ($buildPos[0] + 1.8);
+    setAttr ($streeLight[0] + ".translateZ") ($buildPos[2] - 1.8);
+    setAttr ($streeLight[0] + ".rotateY") -90;
+    $baseGround = `polyUnite $baseGround[0] $streeLight[0] `;
+    
+    $streeLight = createTrafficLight();
+    setAttr ($streeLight[0] + ".translateX") ($buildPos[0] - 1.8);
+    setAttr ($streeLight[0] + ".translateZ") ($buildPos[2] + 1.8);
+    setAttr ($streeLight[0] + ".rotateY") 90;
+    $baseGround = `polyUnite $baseGround[0] $streeLight[0] `;
+   }
+   
+   delete -ch $baseGround[0];
+   makeIdentity -apply true -t 1 -r 1 -s 1 -n 0 $baseGround[0];
+   move -a $buildPos[0] $buildPos[1] $buildPos[2] ($baseGround[0] + ".scalePivot") ($baseGround[0] + ".rotatePivot") ;
+   editDisplayLayerMembers $PiecesDisplayLayer $baseGround[0]; //add build piece to display layer
+   tglSelectMode( 0 ); //set select mode to face selction only ( for convienence )
+  }
+ }
+}
+
+/*
+* Create a rigt-angled turn road piece ( with or without streetlights)
+* @return: none;
+*/
+proc createRightRoad()
+{
+ global string $PiecesDisplayLayer;
+ global string $turnRoad_LightpostCheck;
+
+ float $allFacePos[] = returnSelectedFacePositions();
+
+ int $numItems = size($allFacePos);
+ float $buildPos[3];
+ 
+ int $i;
+ for ($i = 0; $i < $numItems; $i+=3)
+ {
+  $buildPos[0] = $allFacePos[$i];
+  $buildPos[1] = $allFacePos[$i + 1];
+  $buildPos[2] = $allFacePos[$i + 2];
+  
+  if ( isUsedSpot( $buildPos ) )
+  {
+   warning "One or more of the faces you chose already have been built upon";
+  }
+  else
+  {
+   addBuildPoint( $buildPos );  //add build point to list of spaces now is use
+  
+   //base ground
+   string $baseGround[] = `polyCreateFacet -p -2.0 0.0 -2.0 -p -2.0 0.0 2.0 -p 2.0 0.0 2.0 -p 2.0 0.0 -2.0`;  //base ground level
+   move -a $buildPos[0] $buildPos[1] $buildPos[2] $baseGround[0];
+   polyExtrudeFacet -kft true -ltz 0.24 -ls 1.0 1.0 1.0 $baseGround[0];
+   
+   //z-axis aligned initially
+   //curb
+   polySplitRing -sma 180 -wt 0.25 ($baseGround[0] + ".e[0]") ($baseGround[0] + ".e[2]") ($baseGround[0] + ".e[6]") ($baseGround[0] + ".e[10]");
+   polySplitRing -sma 180 -wt 0.3333333 ($baseGround[0] + ".e[2]") ($baseGround[0] + ".e[10]") ($baseGround[0] + ".e[12]") ($baseGround[0] + ".e[13]");
+   polySplitRing -sma 180 -wt 0.8 ($baseGround[0] + ".e[0]") ($baseGround[0] + ".e[6]") ($baseGround[0] + ".e[15]") ($baseGround[0] + ".e[17]");
+   polySplitRing -sma 180 -wt 0.8 ($baseGround[0] + ".e[2]") ($baseGround[0] + ".e[10]") ($baseGround[0] + ".e[23]") ($baseGround[0] + ".e[25]");
+   
+   //sidewalk
+   polySplitRing -sma 180 -wt 0.25 ($baseGround[0] + ".e[1]") ($baseGround[0] + ".e[3]") ($baseGround[0] + ".e[8]") ($baseGround[0] + ".e[11]") ($baseGround[0] + ".e[16]") ($baseGround[0] + ".e[19]") ($baseGround[0] + ".e[24]") ($baseGround[0] + ".e[27]") ($baseGround[0] + ".e[32]") ($baseGround[0] + ".e[35]") ($baseGround[0] + ".e[40]") ($baseGround[0] + ".e[43]");
+   polySplitRing -sma 180 -wt 0.3333333 ($baseGround[0] + ".e[3]") ($baseGround[0] + ".e[11]") ($baseGround[0] + ".e[19]") ($baseGround[0] + ".e[24]") ($baseGround[0] + ".e[35]") ($baseGround[0] + ".e[40]") ($baseGround[0] + ".e[44:45]") ($baseGround[0] + ".e[51]") ($baseGround[0] + ".e[53]") ($baseGround[0] + ".e[63]") ($baseGround[0] + ".e[65]");
+   polySplitRing -sma 180 -wt 0.5 ($baseGround[0] + ".e[44:45]") ($baseGround[0] + ".e[51]") ($baseGround[0] + ".e[53]") ($baseGround[0] + ".e[63]") ($baseGround[0] + ".e[65]") ($baseGround[0] + ".e[68:69]") ($baseGround[0] + ".e[75]") ($baseGround[0] + ".e[77]") ($baseGround[0] + ".e[87]") ($baseGround[0] + ".e[89]");
+   
+   //second curb
+   polySplitRing -sma 180 -wt 0.8 ($baseGround[0] + ".e[1]") ($baseGround[0] + ".e[8]") ($baseGround[0] + ".e[16]") ($baseGround[0] + ".e[27]") ($baseGround[0] + ".e[32]") ($baseGround[0] + ".e[43]") ($baseGround[0] + ".e[47]") ($baseGround[0] + ".e[49]") ($baseGround[0] + ".e[55]") ($baseGround[0] + ".e[57]") ($baseGround[0] + ".e[59]") ($baseGround[0] + ".e[61]");
+   polySplitRing -sma 180 -wt 0.8 ($baseGround[0] + ".e[3]") ($baseGround[0] + ".e[11]") ($baseGround[0] + ".e[19]") ($baseGround[0] + ".e[24]") ($baseGround[0] + ".e[35]") ($baseGround[0] + ".e[40]") ($baseGround[0] + ".e[71]") ($baseGround[0] + ".e[73]") ($baseGround[0] + ".e[79]") ($baseGround[0] + ".e[81]") ($baseGround[0] + ".e[83]") ($baseGround[0] + ".e[85]");
+   
+   polyExtrudeFacet -kft true -ltz 0.06 -ls 1.0 1.0 1.0 ($baseGround[0] + ".f[24]") ($baseGround[0] + ".f[26]") ($baseGround[0] + ".f[36]") ($baseGround[0] + ".f[50]") ($baseGround[0] + ".f[59:62]") ($baseGround[0] + ".f[72]") ($baseGround[0] + ".f[74:75]");
+   polyExtrudeFacet -kft true -ltz 0.06 -ls 0.95 0.95 0.95 ($baseGround[0] + ".f[0]") ($baseGround[0] + ".f[7]") ($baseGround[0] + ".f[15]") ($baseGround[0] + ".f[19]") ($baseGround[0] + ".f[27]") ($baseGround[0] + ".f[63]") ($baseGround[0] + ".f[71]");
+   polyExtrudeFacet -kft false -ltz 0.06 -ls 0.95 0.95 0.95 ($baseGround[0] + ".f[11]") ($baseGround[0] + ".f[23]") ($baseGround[0] + ".f[35]") ($baseGround[0] + ".f[51]");
+  
+   int $wantLights = `checkBox -q -value $turnRoad_LightpostCheck`;
+   if ( $wantLights )
+   {
+    //add traffic lights ( if checked )
+    string $streeLight[];
+    $streeLight = createLightPost();
+    setAttr ($streeLight[0] + ".translateX") $buildPos[0];
+    setAttr ($streeLight[0] + ".translateZ") ($buildPos[2] - 1.8);
+    setAttr ($streeLight[0] + ".rotateY") 180;
+    $baseGround = `polyUnite $baseGround[0] $streeLight[0] `;
+    
+    $streeLight = createLightPost();
+    setAttr ($streeLight[0] + ".translateX") ($buildPos[0] - 1.8);
+    setAttr ($streeLight[0] + ".translateZ") $buildPos[2];
+    setAttr ($streeLight[0] + ".rotateY") -90;
+    $baseGround = `polyUnite $baseGround[0] $streeLight[0] `;
+   }
+  
+   delete -ch $baseGround[0];
+   makeIdentity -apply true -t 1 -r 1 -s 1 -n 0 $baseGround[0];
+   move -a $buildPos[0] $buildPos[1] $buildPos[2] ($baseGround[0] + ".scalePivot") ($baseGround[0] + ".rotatePivot") ;
+   editDisplayLayerMembers $PiecesDisplayLayer $baseGround[0]; //add build piece to display layer
+   tglSelectMode( 0 ); //set select mode to face selction only ( for convienence )
+  }
+ }
+}
+
+/*
+* General Building creation function that create on selected face and randomizes which of the 5 types of buildings are created.
+* ( the types of buildings selectable can also be altered by GUi)
+* @return: none;
+*/
+proc createBuildings()
+{
+ global string $building_SkyscraperCheck;
+ global string $building_ApartmentCheck;
+ global string $building_GovernmentCheck;
+ global string $building_MidLevelOneCheck;
+ global string $building_MidLevelTwoCheck;
+ global string $building_BuildHeightSlide;
+
+ float $allFacePos[] = returnSelectedFacePositions();
+ 
+ int $numItems = size($allFacePos);
+ float $pointPos[3];
+ 
+ //go through all faces selected
+ int $i;
+ for ($i = 0; $i < $numItems; $i+=3)
+ {
+  $pointPos[0] = $allFacePos[$i];
+  $pointPos[1] = $allFacePos[$i + 1];
+  $pointPos[2] = $allFacePos[$i + 2];
+  
+  if ( isUsedSpot( $pointPos ) )
+  {
+   warning "One or more of the faces you chose already have been built upon";
+  }
+  else
+  {
+   float $randNum;
+   int $heightValue = `intSliderGrp -q -value $building_BuildHeightSlide`;
+   int $buildingSomething = false;
+   int $wantSky = `checkBox -q -value $building_SkyscraperCheck`;
+   int $wantGov = `checkBox -q -value $building_GovernmentCheck`;
+   int $wantApt = `checkBox -q -value $building_ApartmentCheck`;
+   int $wantMedOne = `checkBox -q -value $building_MidLevelOneCheck`;
+   int $wantMedTwo = `checkBox -q -value $building_MidLevelTwoCheck`;
+   
+   //must check to make sure one of the buildings options is checked or else will get stuck in infinite loop
+   if (!$wantSky && !$wantGov && !$wantApt && !$wantMedOne && !$wantMedTwo)
+   {
+    warning "no buildings are selected so none will be created";
+   }
+   else
+   {
+    while ( !$buildingSomething )
+    {
+     $randNum = (int)`rand 0 4.99`;
+     switch ( $randNum )
+     {
+      case 0.0:
+       if ( $wantSky )
+       {
+        addBuildPoint( $pointPos );
+        createSkyscrapper( $pointPos, $heightValue );
+        $buildingSomething = true;
+       }
+       break;
+      case 1.0:
+       if ( $wantGov )
+       {
+        addBuildPoint( $pointPos );
+        createGovernmentBuild( $pointPos, $heightValue );
+        $buildingSomething = true;
+       }
+       break;
+      case 2.0:
+       if ( $wantApt )
+       {
+        addBuildPoint( $pointPos );
+        createApartmentBuild( $pointPos, $heightValue );
+        $buildingSomething = true;
+       }
+       break;
+      case 3.0:
+       if ( $wantMedOne )
+       {
+        addBuildPoint( $pointPos );
+        createMediumBuildOne( $pointPos, $heightValue );
+        $buildingSomething = true;
+       }
+       break;
+      case 4.0:
+       if ( $wantMedTwo )
+       {
+        addBuildPoint( $pointPos );
+        createMediumBuildTwo( $pointPos, $heightValue );
+        $buildingSomething = true;
+       }
+       break;
+     }
+    }
+   }
+  }
+ }
+}
+
+/*
+* Create Skyscrapper building of a random height
+* @param: float[] ( the point where to build the building )
+* @param: int ( the general hieght value the building height should randomly vary around )
+* @return: none;
+*/
+proc createSkyscrapper( float $buildPos[], int $heightValue )
+{
+ global string $PiecesDisplayLayer;
+
+ int $randHeight = (int)`rand -2.99 2.99`;
+ $randHeight += $heightValue;
+
+ int $numFirstSections = $randHeight;
+ int $numSecondSections = $randHeight - (int)($randHeight * 0.9);
+ int $numThirdSections = $randHeight;
+ float $currentHeight = 0.0;
+ string $namespace = getNewNamespace();
+ 
+ namespace -add $namespace;
+ namespace -set $namespace;
+
+ string $baseShapeName[] = `polyCreateFacet -p -2.0 0.0 0.5 -p -1.0 0.0 1.5 -p 1.0 0.0 1.5 -p 2.0 0.0 0.5 -p 1.0 0.0 -1.5 -p -1.0 0.0 -1.5`;  //base reference piece
+ 
+ //move into base position
+ rotate -os -r 0 45deg 0 $baseShapeName[0];
+ move -a $buildPos[0] $buildPos[1] $buildPos[2] $baseShapeName[0];
+
+ //base ground
+ string $baseGround[] = `polyCreateFacet -p -2.0 0.0 -2.0 -p -2.0 0.0 2.0 -p 2.0 0.0 2.0 -p 2.0 0.0 -2.0`;  //base ground level
+ move -a $buildPos[0] $buildPos[1] $buildPos[2] $baseGround[0];
+ polyExtrudeFacet -kft true -ltz 0.3 -ls 1.0 1.0 1.0 $baseGround[0];
+ $currentHeight += 0.3;
+
+ //base floor
+ string $baseFloorShape[] = `duplicate $baseShapeName[0]`;
+ scale 0.8 0.8 0.8 $baseFloorShape[0];
+ move -r 0 $currentHeight 0 $baseFloorShape[0];
+ polyExtrudeFacet -kft true -ltz 0.8 -ls 1.0 1.0 1.0 $baseFloorShape[0];
+ $currentHeight += 0.8;
+ 
+ //roof creation ( will place after windows )
+ string $roof[] = `duplicate $baseShapeName[0]`;
+ 
+ //$bottomCeiling ( will place after windows )
+ string $bottomCeiling[] = `duplicate $baseShapeName[0]`;
+ move -r 0 $currentHeight 0 $bottomCeiling[0];
+ 
+ setAttr ($baseShapeName[1] + ".subdivision") 5;  //create windows
+ 
+ string $tempObj[];
+ int $i;
+ //first section
+ for( $i = 0; $i < $numFirstSections; $i++ )
+ {
+  $tempObj = `duplicate -ic $baseShapeName[0]`;
+  move -r 0 $currentHeight 0 $tempObj[0];
+  polyExtrudeFacet -kft true -ltz 0.5 -ls 1.0 1.0 1.0 $tempObj[0];
+  delete ($tempObj[0] + ".f[0]") ($tempObj[0] + ".f[1]");
+  polyExtrudeFacet -kft false -ltz 0.05 -ls 0.96 0.96 0.96 $tempObj[0];
+  polySoftEdge -a 0 $tempObj[0];
+  $currentHeight += 0.5;
+ }
+ 
+ //second section
+ for( $i = 0; $i < $numSecondSections; $i++ )
+ {
+  $tempObj = `duplicate -ic $baseShapeName[0]`;
+  move -r 0 $currentHeight 0 $tempObj[0];
+  scale 0.95 0.95 0.95 $tempObj[0];
+  polyExtrudeFacet -kft true -ltz 0.5 -ls 1.0 1.0 1.0 $tempObj[0];
+  delete ($tempObj[0] + ".f[0]") ($tempObj[0] + ".f[1]");
+  polyExtrudeFacet -kft false -ltz 0.05 -ls 0.96 0.96 0.96 $tempObj[0];
+  polySoftEdge -a 0 $tempObj[0];
+  $currentHeight += 0.5;
+ }
+ 
+ //third section
+ for( $i = 0; $i < $numThirdSections; $i++ )
+ {
+  $tempObj = `duplicate -ic $baseShapeName[0]`;
+  move -r 0 $currentHeight 0 $tempObj[0];
+  polyExtrudeFacet -kft true -ltz 0.5 -ls 1.0 1.0 1.0 $tempObj[0];
+  delete ($tempObj[0] + ".f[0]") ($tempObj[0] + ".f[1]");
+  polyExtrudeFacet -kft false -ltz 0.05 -ls 0.96 0.96 0.96 $tempObj[0];
+  polySoftEdge -a 0 $tempObj[0];
+  $currentHeight += 0.5;
+ }
+ 
+ //roof
+ move -r 0 $currentHeight 0 $roof[0];
+ 
+ delete -ch ($namespace + ":*");
+ string $objNames[] = `polyUnite ($namespace + ":*")`;
+ 
+ //make sure that pivot points are in appropriate places for future rotations
+ move -a $buildPos[0] $buildPos[1] $buildPos[2] ($objNames[0] + ".scalePivot") ($objNames[0] + ".rotatePivot") ;
+ editDisplayLayerMembers $PiecesDisplayLayer $objNames[0]; //add build piece to display layer
+ tglSelectMode( 0 ); //set select mode to face selction only ( for convienence )
+ 
+ namespace -set ":";
+}
+
+/*
+* Create Government building of a random height
+* @param: float[] ( the point where to build the building )
+* @param: int ( the general hieght value the building height should randomly vary around )
+* @return: none;
+*/
+proc createGovernmentBuild(  float $buildPos[], int $heightValue )
+{
+ global string $PiecesDisplayLayer;
+
+ int $randHeight = (int)`rand -2.99 2.99`;
+ $randHeight += $heightValue;
+
+ int $numSteps = 10;
+ int $numFirstSections = $randHeight;
+ float $currentHeight = 0.0;
+ float $currScale = 1.25;
+ string $namespace = getNewNamespace();
+ 
+ namespace -add $namespace;
+ namespace -set $namespace;
+
+ string $baseShapeName[] = `polyCreateFacet -p -1.5 0.0 -1.5 -p -1.5 0.0 1.5 -p 1.5 0.0 1.5 -p 1.5 0.0 -1.5`;  //base reference piece
+ 
+ //move into base position
+ move -a $buildPos[0] $buildPos[1] $buildPos[2] $baseShapeName[0];
+
+ //base ground
+ string $baseGround[] = `polyCreateFacet -p -2.0 0.0 -2.0 -p -2.0 0.0 2.0 -p 2.0 0.0 2.0 -p 2.0 0.0 -2.0`;  //base ground level
+ move -a $buildPos[0] $buildPos[1] $buildPos[2] $baseGround[0];
+ polyExtrudeFacet -kft true -ltz 0.3 -ls 1.0 1.0 1.0 $baseGround[0];
+ $currentHeight += 0.3;
+
+ string $tempObj[];
+ int $i;
+ 
+ //steps
+ for( $i = 0; $i < $numSteps; $i++ )
+ {
+  $tempObj = `duplicate $baseShapeName[0]`;
+  move -r 0 $currentHeight 0 $tempObj[0];
+  scale $currScale $currScale $currScale $tempObj[0];
+  $currScale -= 0.05;
+  polyExtrudeFacet -kft true -ltz 0.1 -ls 1.0 1.0 1.0 $tempObj[0];
+  $currentHeight += 0.1;
+ }
+
+ //base floor
+ string $baseFloorShape[] = `duplicate $baseShapeName[0]`;
+ move -r 0 $currentHeight 0 $baseFloorShape[0];
+ scale ($currScale - 0.2) ($currScale - 0.2) ($currScale - 0.2) $baseFloorShape[0];
+ polyExtrudeFacet -kft true -ltz 0.8 -ls 1.0 1.0 1.0 $baseFloorShape[0];
+ delete ($baseFloorShape[0] + ".f[0]") ($baseFloorShape[0] + ".f[1]");
+ $currentHeight += 0.8;
+ 
+ //roof creation ( will place after windows )
+ string $roof[] = `duplicate $baseShapeName[0]`;
+ 
+ setAttr ($baseShapeName[1] + ".subdivision") 4;  //create windows
+ 
+ //$bottomCeiling
+ string $bottomCeiling[] = `duplicate $baseShapeName[0]`;
+ scale $currScale $currScale $currScale $bottomCeiling[0];
+ move -r 0 $currentHeight 0 $bottomCeiling[0];
+ 
+ //main section
+ for( $i = 0; $i < $numFirstSections; $i++ )
+ {
+  $tempObj = `duplicate -ic $baseShapeName[0]`;
+  move -r 0 $currentHeight 0 $tempObj[0];
+  scale $currScale $currScale $currScale $tempObj[0];
+  polyExtrudeFacet -kft true -ltz 0.5 -ls 1.0 1.0 1.0 $tempObj[0];
+  delete ($tempObj[0] + ".f[0]") ($tempObj[0] + ".f[1]");
+  polyExtrudeFacet -kft false -ltz -0.1 -ls 0.6 0.6 0.6 $tempObj[0];
+  polySoftEdge -a 0 $tempObj[0];
+  $currentHeight += 0.5;
+ }
+ 
+ //roof
+ move -r 0 $currentHeight 0 $roof[0];
+ scale ($currScale + 0.05) ($currScale + 0.05) ($currScale + 0.05) $roof[0];
+ polyExtrudeFacet -sma 10 -ch true -kft true -ltz 0.2 -ls 1.0 1.0 1.0 $roof[0];
+ polyExtrudeFacet -sma 10 -kft true -ls 0.9 0.9 0.9 ($roof[0] + ".f[0]");
+ polyExtrudeFacet -sma 10 -kft true -ltz -0.08 -ls 1.0 1.0 1.0 ($roof[0] + ".f[0]");
+ 
+ delete -ch ($namespace + ":*");
+ string $objNames[] = `polyUnite ($namespace + ":*")`;
+ 
+ //make sure that pivot points are in appropriate places for future rotations
+ move -a $buildPos[0] $buildPos[1] $buildPos[2] ($objNames[0] + ".scalePivot") ($objNames[0] + ".rotatePivot") ;
+ editDisplayLayerMembers $PiecesDisplayLayer $objNames[0]; //add build piece to display layer
+ tglSelectMode( 0 ); //set select mode to face selction only ( for convienence )
+ 
+ namespace -set ":";
+}
+
+/*
+* Create Apartment building of a random height
+* @param: float[] ( the point where to build the building )
+* @param: int ( the general hieght value the building height should randomly vary around )
+* @return: none;
+*/
+proc createApartmentBuild(  float $buildPos[], int $heightValue )
+{
+ global string $PiecesDisplayLayer;
+
+ int $randHeight = (int)`rand -2.99 2.99`;
+ $randHeight += $heightValue;
+ 
+ int $numFirstSections = $randHeight;
+ float $currentHeight = 0.0;
+ float $currScale = 1.25;
+ string $namespace = getNewNamespace();
+ 
+ namespace -add $namespace;
+ namespace -set $namespace;
+
+ string $baseShapeName[] = `polyCreateFacet -p -1.5 0.0 -1.5 -p -1.5 0.0 1.5 -p 1.5 0.0 1.5 -p 1.5 0.0 -1.5`;  //base reference piece
+ 
+ //move into base position
+ move -a $buildPos[0] $buildPos[1] $buildPos[2] $baseShapeName[0];
+
+ //base ground
+ string $baseGround[] = `polyCreateFacet -p -2.0 0.0 -2.0 -p -2.0 0.0 2.0 -p 2.0 0.0 2.0 -p 2.0 0.0 -2.0`;  //base ground level
+ move -a $buildPos[0] $buildPos[1] $buildPos[2] $baseGround[0];
+ polyExtrudeFacet -kft true -ltz 0.3 -ls 1.0 1.0 1.0 $baseGround[0];
+ $currentHeight += 0.3;
+
+ string $tempObj[];
+ int $i;
+
+ //base floor
+ string $baseFloorShape[] = `duplicate $baseShapeName[0]`;
+ move -r 0 $currentHeight 0 $baseFloorShape[0];
+ scale ($currScale - 0.2) ($currScale - 0.2) ($currScale - 0.2) $baseFloorShape[0];
+ polyExtrudeFacet -kft true -ltz 0.8 -ls 1.0 1.0 1.0 $baseFloorShape[0];
+ delete ($baseFloorShape[0] + ".f[0]") ($baseFloorShape[0] + ".f[1]");
+ $currentHeight += 0.8;
+ 
+ //roof creation ( will place after windows )
+ string $roof[] = `duplicate $baseShapeName[0]`;
+ 
+ //$bottomCeiling ( will place after windows )
+ string $bottomCeiling[] = `duplicate $baseShapeName[0]`;
+ scale $currScale $currScale $currScale $bottomCeiling[0];
+ move -r 0 $currentHeight 0 $bottomCeiling[0];
+ 
+ setAttr ($baseShapeName[1] + ".subdivision") 4;  //create windows
+ 
+ //main section
+ for( $i = 0; $i < $numFirstSections; $i++ )
+ {
+  $tempObj = `duplicate -ic $baseShapeName[0]`;
+  move -r 0 $currentHeight 0 $tempObj[0];
+  scale $currScale $currScale $currScale $tempObj[0];
+  polyExtrudeFacet -kft true -ltz 0.5 -ls 1.0 1.0 1.0 $tempObj[0];
+  delete ($tempObj[0] + ".f[0]") ($tempObj[0] + ".f[1]");
+  polyExtrudeFacet -kft false -ltz 0.05 -ls 0.96 0.96 0.96 $tempObj[0];
+  polySoftEdge -a 0 $tempObj[0];
+  $currentHeight += 0.5;
+ }
+ 
+ //roof
+ move -r 0 $currentHeight 0 $roof[0];
+ scale ($currScale + 0.05) ($currScale + 0.05) ($currScale + 0.05) $roof[0];
+ polyExtrudeFacet -ch true -kft true -ltz 0.2 -ls 1.0 1.0 1.0 $roof[0];
+ polyExtrudeFacet -kft true -ls 0.9 0.9 0.9 ($roof[0] + ".f[0]");
+ polyExtrudeFacet -kft true -ltz -0.08 -ls 1.0 1.0 1.0 ($roof[0] + ".f[0]");
+ 
+ delete -ch ($namespace + ":*");
+ string $objNames[] = `polyUnite ($namespace + ":*")`;
+ 
+ //make sure that pivot points are in appropriate places for future rotations
+ move -a $buildPos[0] $buildPos[1] $buildPos[2] ($objNames[0] + ".scalePivot") ($objNames[0] + ".rotatePivot") ;
+ editDisplayLayerMembers $PiecesDisplayLayer $objNames[0]; //add build piece to display layer
+ tglSelectMode( 0 ); //set select mode to face selction only ( for convienence )
+ 
+ namespace -set ":";
+
+}
+
+/*
+* Create Medium-sized building of a random height
+* @param: float[] ( the point where to build the building )
+* @param: int ( the general hieght value the building height should randomly vary around )
+* @return: none;
+*/
+proc createMediumBuildOne(  float $buildPos[], int $heightValue )
+{
+ global string $PiecesDisplayLayer;
+
+ int $randHeight = (int)`rand -2.99 2.99`;
+ $randHeight += $heightValue;
+
+ int $numFirstSections = $randHeight;
+ float $currentHeight = 0.0;
+ float $currScale = 1.15;
+ string $namespace = getNewNamespace();
+ 
+ namespace -add $namespace;
+ namespace -set $namespace;
+
+ string $baseShapeName[] = `polyCreateFacet -p -1.5 0.0 -1.5 -p -1.5 0.0 1.5 -p 1.5 0.0 1.5 -p 1.5 0.0 -1.5`;  //base reference piece
+ 
+ //move into base position
+ move -a $buildPos[0] $buildPos[1] $buildPos[2] $baseShapeName[0];
+ 
+ //base ground
+ string $baseGround[] = `polyCreateFacet -p -2.0 0.0 -2.0 -p -2.0 0.0 2.0 -p 2.0 0.0 2.0 -p 2.0 0.0 -2.0`;  //base ground level
+ move -a $buildPos[0] $buildPos[1] $buildPos[2] $baseGround[0];
+ polyExtrudeFacet -kft true -ltz 0.3 -ls 1.0 1.0 1.0 $baseGround[0];
+ $currentHeight += 0.3;
+
+ string $tempObj[];
+ int $i;
+
+ //base floor
+ string $baseFloorShape[] = `duplicate $baseShapeName[0]`;
+ move -r 0 $currentHeight 0 $baseFloorShape[0];
+ scale $currScale $currScale $currScale $baseFloorShape[0];
+ polyExtrudeFacet -kft true -ltz 0.8 -ls 1.0 1.0 1.0 $baseFloorShape[0];
+ delete ($baseFloorShape[0] + ".f[0]") ($baseFloorShape[0] + ".f[1]");
+ $currentHeight += 0.8;
+ 
+ //roof creation ( will place after windows )
+ string $roof[] = `duplicate $baseShapeName[0]`;
+ 
+ setAttr ($baseShapeName[1] + ".subdivision") 4;  //create windows
+ 
+ //main section
+ for( $i = 0; $i < $numFirstSections; $i++ )
+ {
+  $tempObj = `duplicate -ic $baseShapeName[0]`;
+  move -r 0 $currentHeight 0 $tempObj[0];
+  scale $currScale $currScale $currScale $tempObj[0];
+  polyExtrudeFacet -kft true -ltz 0.5 -ls 1.0 1.0 1.0 $tempObj[0];
+  delete ($tempObj[0] + ".f[0]") ($tempObj[0] + ".f[1]");
+  polyExtrudeFacet -kft false -ls 0.5 0.6 0.8 $tempObj[0];
+  polyExtrudeFacet -kft false -ltz 0.03 ($tempObj[0] + ".f[0:15]");
+  polyExtrudeFacet -kft false -ls 0.8 0.8 0.8 ($tempObj[0] + ".f[0:15]");
+  polyExtrudeFacet -kft false -ltz -0.05 ($tempObj[0] + ".f[0:15]");
+  $currentHeight += 0.5;
+ }
+ 
+ //roof
+ move -r 0 $currentHeight 0 $roof[0];
+ scale ($currScale + 0.05) ($currScale + 0.05) ($currScale + 0.05) $roof[0];
+ polyExtrudeFacet -ch true -kft true -ltz 0.2 -ls 1.0 1.0 1.0 $roof[0];
+ polyExtrudeFacet -kft true -ls 0.9 0.9 0.9 ($roof[0] + ".f[0]");
+ polyExtrudeFacet -kft true -ltz -0.12 -ls 1.0 1.0 1.0 ($roof[0] + ".f[0]");
+ 
+ delete -ch ($namespace + ":*");
+ string $objNames[] = `polyUnite ($namespace + ":*")`;
+ 
+ //make sure that pivot points are in appropriate places for future rotations
+ move -a $buildPos[0] $buildPos[1] $buildPos[2] ($objNames[0] + ".scalePivot") ($objNames[0] + ".rotatePivot") ;
+ editDisplayLayerMembers $PiecesDisplayLayer $objNames[0]; //add build piece to display layer
+ tglSelectMode( 0 ); //set select mode to face selction only ( for convienence )
+ 
+ namespace -set ":";
+}
+
+/*
+* Create Medium-sized building of a random height
+* @param: float[] ( the point where to build the building )
+* @param: int ( the general hieght value the building height should randomly vary around )
+* @return: none;
+*/
+proc createMediumBuildTwo(  float $buildPos[], int $heightValue )
+{
+ global string $PiecesDisplayLayer;
+
+ int $randHeight = (int)`rand -2.99 2.99`;
+ $randHeight += $heightValue;
+
+ int $numFirstSections = $randHeight;
+ float $currentHeight = 0.0;
+ float $currScale = 1.15;
+ string $namespace = getNewNamespace();
+ 
+ namespace -add $namespace;
+ namespace -set $namespace;
+
+ string $baseShapeName[] = `polyCreateFacet -p -1.5 0.0 -1.5 -p -1.5 0.0 1.5 -p 1.5 0.0 1.5 -p 1.5 0.0 -1.5`;  //base reference piece
+ 
+ //move into base position
+ move -a $buildPos[0] $buildPos[1] $buildPos[2] $baseShapeName[0];
+ 
+ //base ground
+ string $baseGround[] = `polyCreateFacet -p -2.0 0.0 -2.0 -p -2.0 0.0 2.0 -p 2.0 0.0 2.0 -p 2.0 0.0 -2.0`;  //base ground level
+ move -a $buildPos[0] $buildPos[1] $buildPos[2] $baseGround[0];
+ polyExtrudeFacet -kft true -ltz 0.3 -ls 1.0 1.0 1.0 $baseGround[0];
+ $currentHeight += 0.3;
+
+ string $tempObj[];
+ int $i;
+
+ //base floor
+ string $baseFloorShape[] = `duplicate $baseShapeName[0]`;
+ move -r 0 $currentHeight 0 $baseFloorShape[0];
+ scale $currScale $currScale $currScale $baseFloorShape[0];
+ polyExtrudeFacet -kft true -ltz 0.8 -ls 1.0 1.0 1.0 $baseFloorShape[0];
+ delete ($baseFloorShape[0] + ".f[0]") ($baseFloorShape[0] + ".f[1]");
+ $currentHeight += 0.8;
+ 
+ //roof creation ( will place after windows )
+ string $roof[] = `duplicate $baseShapeName[0]`;
+ 
+ setAttr ($baseShapeName[1] + ".subdivision") 4;  //create windows
+ 
+ //main section
+ for( $i = 0; $i < $numFirstSections; $i++ )
+ {
+  $tempObj = `duplicate -ic $baseShapeName[0]`;
+  move -r 0 $currentHeight 0 $tempObj[0];
+  scale $currScale $currScale $currScale $tempObj[0];
+  polyExtrudeFacet -kft true -ltz 0.5 -ls 1.0 1.0 1.0 $tempObj[0];
+  delete ($tempObj[0] + ".f[0]") ($tempObj[0] + ".f[1]");
+  polyExtrudeFacet -kft false -ls 0.5 0.6 0.8 $tempObj[0];
+  polyExtrudeFacet -kft false -ltz 0.03 ($tempObj[0] + ".f[0:15]");
+  polyExtrudeFacet -kft false -ls 0.8 0.8 0.8 ($tempObj[0] + ".f[0:15]");
+  polyExtrudeFacet -kft false -ltz -0.05 ($tempObj[0] + ".f[0:15]");
+  $currentHeight += 0.5;
+  
+  $tempObj = `duplicate -ic $baseShapeName[0]`;
+  move -r 0 $currentHeight 0 $tempObj[0];
+  scale ($currScale + 0.1) $currScale ($currScale + 0.1) $tempObj[0];
+  polyExtrudeFacet -kft true -ltz 0.2 -ls 1.0 1.0 1.0 $tempObj[0];
+  $currentHeight += 0.2;
+ }
+ 
+ //roof
+ move -r 0 $currentHeight 0 $roof[0];
+ scale ($currScale + 0.05) ($currScale + 0.05) ($currScale + 0.05) $roof[0];
+ polyExtrudeFacet -ch true -kft true -ltz 0.2 -ls 1.0 1.0 1.0 $roof[0];
+ polyExtrudeFacet -kft true -ls 0.9 0.9 0.9 ($roof[0] + ".f[0]");
+ polyExtrudeFacet -kft true -ltz -0.12 -ls 1.0 1.0 1.0 ($roof[0] + ".f[0]");
+ 
+ delete -ch ($namespace + ":*");
+ string $objNames[] = `polyUnite ($namespace + ":*")`;
+ 
+ //make sure that pivot points are in appropriate places for future rotations
+ move -a $buildPos[0] $buildPos[1] $buildPos[2] ($objNames[0] + ".scalePivot") ($objNames[0] + ".rotatePivot") ;
+ editDisplayLayerMembers $PiecesDisplayLayer $objNames[0]; //add build piece to display layer
+ tglSelectMode( 0 ); //set select mode to face selction only ( for convienence )
+ 
+ namespace -set ":";
+}
+
+
+/////////////////////////////////////////////////
+///////////// end primary functions /////////
+/////////////////////////////////////////////////
+
+
+/////////////////////////////////////////////////
+///////////// begin secondary functions /////
+/////////////////////////////////////////////////
+
+/*
+* Rotates a selected build piece
+* @param: float ( the angle by which the piece will be rotated )
+* @return: none
+*/
+proc rotatePiece( float $angle )
+{
+ string $allSelObjects[] = `ls -sl`;
+ float $currRot;
+ 
+ for ($obj in $allSelObjects)
+ {
+  $currRot = `getAttr ($obj + ".rotateY")`;
+  setAttr ($obj + ".rotateY") ($currRot + $angle);
+ }
+}
+
+/*
+* Deletes a selected build piece ( and also removes it position from global reference so that other pieces can now be placed in its spot)
+* @return: none
+*/
+proc deletePiece()
+{
+ global float $buildPos[];
+ 
+ string $allSelObjects[] = `ls -sl`;
+ float $currRot;
+ 
+ for ($obj in $allSelObjects)
+ {
+   //first remove the point references from
+ 
+   float $objPos[] = `getAttr ($obj + ".rotatePivot")`;
+   int $arrSize = size($buildPos);
+   int $i;
+   
+   for($i = 0; $i < $arrSize; $i+=2)
+   {
+    if(($objPos[0] == $buildPos[$i]) && ($objPos[2] == $buildPos[$i + 1]))
+    {
+     $buildPos[$i] = -1000;
+     $buildPos[$i + 1] = -1001;
+     delete $obj;
+     tglSelectMode( 0 ); //set select mode to face selction only ( for convienence )
+    }
+   }
+ }
+}
+
+/*
+* Rotates a selected build piece ( or many either left or right/counterclockwise clockwise)
+* @param: int ( 0 = exclusive face select mode of ground plane, 1 = can only select build pieces )
+* @return: none
+*/
+proc tglSelectMode( int $selector )
+{
+ global string $groundDisplayLayer;
+ global string $PiecesDisplayLayer;
+ global string $lightsDisplayLayer;
+
+ //clear everything first
+ select -clear;
+ hilite -unHilite "*";
+
+ if ($selector == 0)
+ {
+  //face select mode ( 0 = normal, 1 = template, 2 = reference ( i.e. locked ) )
+  setAttr ($groundDisplayLayer + ".displayType") 0;
+  setAttr ($PiecesDisplayLayer + ".displayType") 2;
+  setAttr ($lightsDisplayLayer + ".displayType") 2;
+  
+  global string $groundPlaneName;
+  grid -toggle false;         //turn off grid for better visibility
+  hilite $groundPlaneName;       //hilite ground plane for component selection
+  selectMode -component;        //set selct mode to only components ( not objects )
+  selectType -allComponents false;     //set to only select faces
+  selectType -facet true;
+  
+ }
+ else if ($selector == 1)
+ {
+  //object select mode
+  
+  //face select mode ( 0 = normal, 1 = template, 2 = reference ( i.e. locked ) )
+  setAttr ($groundDisplayLayer + ".displayType") 2;
+  setAttr ($PiecesDisplayLayer + ".displayType") 0;
+  setAttr ($lightsDisplayLayer + ".displayType") 2;
+  
+  selectMode -object;
+ }
+}
+
+/*
+* Create a street light and return reference to itself
+* @return: string[] ( name reference to object )
+*/
+proc string[] createLightPost()
+{
+ string $namespace = getNewNamespace();
+ namespace -add $namespace;
+ namespace -set $namespace;
+
+ string $newPost[];
+ $newPost = `polyCube -w 0.15 -h 0.25 -d 0.15 -sx 1 -sy 1 -sz 1`;
+ setAttr ($newPost[0] + ".translateY") 0.4;
+ 
+ $newPost = `polyCylinder -r 0.05 -h 2.0 -sx 1 -sy 1 -sz 1`;
+ setAttr ($newPost[0] + ".translateY") 1.5;
+ setAttr ($newPost[1] + ".subdivisionsAxis") 8;
+ 
+ $newPost = `polyCylinder -r 0.04 -h 1.0 -sx 1 -sy 1 -sz 1`;
+ setAttr ($newPost[0] + ".translateZ") -0.49;
+ setAttr ($newPost[0] + ".translateY") 2.5;
+ setAttr ($newPost[0] + ".rotateX") 105;
+ setAttr ($newPost[1] + ".subdivisionsAxis") 8;
+
+ $newPost = `polyCube -w 0.12 -h 0.18 -d 0.085 -sx 1 -sy 1 -sz 1`;
+ setAttr ($newPost[0] + ".translateZ") -1.05;
+ setAttr ($newPost[0] + ".translateY") 2.63;
+ setAttr ($newPost[0] + ".rotateX") 90;
+
+ $newPost = `polyUnite ($namespace + ":*")`;
+ namespace -set ":";
+   
+ return $newPost;
+}
+
+/*
+* Create a traffic light and return reference to itself
+* @return: string[] ( name reference to object )
+*/
+proc string[] createTrafficLight()
+{
+ string $namespace = getNewNamespace();
+ namespace -add $namespace;
+ namespace -set $namespace;
+
+ string $newPost[];
+ $newPost = `polyCube -w 0.15 -h 0.25 -d 0.15 -sx 1 -sy 1 -sz 1`;
+ setAttr ($newPost[0] + ".translateY") 0.4;
+ 
+ $newPost = `polyCylinder -r 0.05 -h 2.0 -sx 1 -sy 1 -sz 1`;
+ setAttr ($newPost[0] + ".translateY") 1.5;
+ setAttr ($newPost[1] + ".subdivisionsAxis") 8;
+ 
+ $newPost = `polyCylinder -r 0.03 -h 1.3 -sx 1 -sy 1 -sz 1`;
+ setAttr ($newPost[0] + ".translateZ") 0.62;
+ setAttr ($newPost[0] + ".translateY") 2.45;
+ setAttr ($newPost[0] + ".rotateX") -95;
+ setAttr ($newPost[1] + ".subdivisionsAxis") 8;
+
+ $newPost = `polyCube -w 0.055 -h 0.65 -d 0.30 -sx 1 -sy 1 -sz 1`;
+ setAttr ($newPost[0] + ".translateX") 0.04;
+ setAttr ($newPost[0] + ".translateZ") 1.12;
+ setAttr ($newPost[0] + ".translateY") 2.35;
+ setAttr ($newPost[0] + ".rotateX") 90;
+ 
+ //lights
+ $newPost = `polyCylinder -r 0.08 -h 0.25 -sx 1 -sy 1 -sz 1`;
+ setAttr ($newPost[0] + ".translateX") 0.07;
+ setAttr ($newPost[0] + ".translateZ") 0.92;
+ setAttr ($newPost[0] + ".translateY") 2.35;
+ setAttr ($newPost[0] + ".rotateZ") 90;
+ setAttr ($newPost[1] + ".subdivisionsAxis") 8;
+ setAttr ($newPost[1] + ".subdivisionsCaps") 0;
+ delete ($newPost[0] + ".f[8]");
+ move -r -0.04 0 0 ($newPost[0] + ".vtx[2]") ($newPost[0] + ".vtx[4]");
+ move -r -0.06 0 0 ($newPost[0] + ".vtx[3]");
+ 
+ //light
+ $newPost = `polySphere -r 0.07 -sx 8 -sy 8`;
+ setAttr ($newPost[0] + ".translateX") 0.07;
+ setAttr ($newPost[0] + ".translateZ") 0.92;
+ setAttr ($newPost[0] + ".translateY") 2.35;
+
+ 
+ $newPost = `polyCylinder -r 0.08 -h 0.25 -sx 1 -sy 1 -sz 1`;
+ setAttr ($newPost[0] + ".translateX") 0.07;
+ setAttr ($newPost[0] + ".translateZ") 1.12;
+ setAttr ($newPost[0] + ".translateY") 2.35;
+ setAttr ($newPost[0] + ".rotateZ") 90;
+ setAttr ($newPost[1] + ".subdivisionsAxis") 8;
+ setAttr ($newPost[1] + ".subdivisionsCaps") 0;
+ delete ($newPost[0] + ".f[8]");
+ move -r -0.04 0 0 ($newPost[0] + ".vtx[2]") ($newPost[0] + ".vtx[4]");
+ move -r -0.06 0 0 ($newPost[0] + ".vtx[3]");
+ 
+ //light
+ $newPost = `polySphere -r 0.07 -sx 8 -sy 8`;
+ setAttr ($newPost[0] + ".translateX") 0.07;
+ setAttr ($newPost[0] + ".translateZ") 1.12;
+ setAttr ($newPost[0] + ".translateY") 2.35;
+ 
+ 
+ $newPost = `polyCylinder -r 0.08 -h 0.25 -sx 1 -sy 1 -sz 1`;
+ setAttr ($newPost[0] + ".translateX") 0.07;
+ setAttr ($newPost[0] + ".translateZ") 1.32;
+ setAttr ($newPost[0] + ".translateY") 2.35;
+ setAttr ($newPost[0] + ".rotateZ") 90;
+ setAttr ($newPost[1] + ".subdivisionsAxis") 8;
+ setAttr ($newPost[1] + ".subdivisionsCaps") 0;
+ delete ($newPost[0] + ".f[8]");
+ move -r -0.04 0 0 ($newPost[0] + ".vtx[2]") ($newPost[0] + ".vtx[4]");
+ move -r -0.06 0 0 ($newPost[0] + ".vtx[3]");
+ 
+ //light
+ $newPost = `polySphere -r 0.07 -sx 8 -sy 8`;
+ setAttr ($newPost[0] + ".translateX") 0.07;
+ setAttr ($newPost[0] + ".translateZ") 1.32;
+ setAttr ($newPost[0] + ".translateY") 2.35;
+ 
+
+ $newPost = `polyUnite ($namespace + ":*")`;
+ namespace -set ":";
+   
+ return $newPost;
+}
+
+/*
+* Create a list of shaders to possibly be used to shade objects in scene
+* @return: string[] ( name reference to object )
+*/
+proc createShaders()
+{
+ global string $blueGlass;
+ global string $greenGlass;
+ global string $concrete;
+ global string $redBrick;
+ global string $brownBrick;
+ global string $asphalt;
+
+ $blueGlass = `shadingNode -asShader blinn -name "blueGlass"`;
+ setAttr ($blueGlass + ".color") -type double3 0.11877 0.11877 0.535;
+ setAttr ($blueGlass + ".specularRollOff") 1;
+ setAttr ($blueGlass + ".eccentricity") 0.1009;
+ setAttr ($blueGlass + ".reflectivity") 1;
+ setAttr ($blueGlass + ".specularColor") -type double3 1 1 1 ;
+ setAttr ($blueGlass + ".transparency") -type double3 0.09448 0.09448 0.09448 ;
+ 
+ $greenGlass = `shadingNode -asShader blinn -name "blueGlass"`;
+ setAttr ($greenGlass + ".color") -type double3 0.11877 0.11877 0.535;
+ setAttr ($greenGlass + ".specularRollOff") 1;
+ setAttr ($greenGlass + ".eccentricity") 0.1009;
+ setAttr ($greenGlass + ".reflectivity") 1;
+ setAttr ($greenGlass + ".specularColor") -type double3 1 1 1 ;
+ setAttr ($greenGlass + ".transparency") -type double3 0.09448 0.09448 0.09448 ;
+
+ $concrete = `shadingNode -asShader lambert -name "blueGlass"`;
+ setAttr ($greenGlass + ".color") -type double3 0.478 0.478 0.478;
+ 
+ $redBrick = `shadingNode -asShader lambert -name "blueGlass"`;
+ setAttr ($redBrick + ".color") -type double3  0.5 0.019 0.0463368;
+ 
+ $brownBrick = `shadingNode -asShader lambert -name "blueGlass"`;
+ setAttr ($brownBrick + ".color") -type double3 0.5 0.18225 0;
+ 
+ $asphalt = `shadingNode -asShader blinn -name "blueGlass"`;
+ setAttr ($asphalt + ".color") -type double3 0.204 0.204 0.204;
+}
+
+/////////////////////////////////////////////////
+///////////// end secondary functions /////////
+/////////////////////////////////////////////////
+
+
+/////////////////////////////////////////////////
+///////////// begin helper functions /////////
+/////////////////////////////////////////////////
+
+
+/*
+* Create a list of shaders to possibly be used to shade objects in scene
+* @return: float[] ( an array of all face points currently selected )
+*/
+proc float[] returnSelectedFacePositions()
+{
+ //first make sure the groundPlane is selected
+ global string $groundPlaneName;
+ 
+ float $allFacePos[];
+ int $facePosCounter = 0;
+ 
+ string $allObjects[];
+ string $obj;
+ string $parentObj;
+ 
+ $allSelObjects = `ls -sl`;
+ 
+ //error checking for if any items are selected and then whether appropriate items are selected
+ if ( size($allSelObjects) == 0)
+ {
+  error "Nothing selected: must have faces selected to build items";
+  return $allFacePos;
+ }
+ else
+ {
+  int $numFaces[] = `polyEvaluate -faceComponent -vertexComponent -edgeComponent`; //num of selected components
+  if (( $numFaces[1] != 0 ) || ( $numFaces[2] != 0 ) )
+  {
+   error "must select face components only";
+   return $allFacePos;
+  }
+  else if ( $numFaces[0] == 0 )
+  {
+   error "must have faces selected to build items";
+   return $allFacePos;
+  } 
+ }
+ 
+ 
+ /*
+  Need to use filterExpand so that maya will not automatically "group" objects i.e. object.f[20:22]
+  but rather list each face listed individually i.e. object.f[20] object.f[21] object.f[22]
+ */
+ $allSelObjects = `filterExpand -ex true -sm 34`;
+
+ for ( $obj in $allSelObjects )
+ {
+  //finding parent of component selected
+  $parentObj = getParentFromComponent( $obj );
+  
+  if ( $parentObj ==  $groundPlaneName )
+  {
+   float $facePoints[] = `xform -q -t -ws $obj`;
+   float $faceCentre[] =  getFaceCentre( $facePoints );
+   
+   //print( $faceCentre[0] + " " + $faceCentre[1] + " " + $faceCentre[2] + "\n" );
+   
+   $allFacePos[ $facePosCounter + 0 ] = $faceCentre[0];
+   $allFacePos[ $facePosCounter + 1 ] = $faceCentre[1];
+   $allFacePos[ $facePosCounter + 2 ] = $faceCentre[2];
+   $facePosCounter+=3;
+   
+   //createSkyscrapper();
+  }
+  else
+  {
+   if ($obj ==  ("|" + $groundPlaneName))
+   {
+    error "one or more of the faces of the ground plane must be selected to create";
+   }
+   else
+   {
+    error "the faces selected for creating must belong to the ground plane";
+   }
+  }
+ }
+ 
+ return $allFacePos;
+}
+
+/*
+* Create a list of shaders to possibly be used to shade objects in scene
+* @param: float[] ( list of all vertex points of face )
+* @return: float[] ( the face centre's point )
+*/
+proc float[] getFaceCentre( float $points[] )
+{
+ float $faceCenter[];
+ $faceCenter[0] = ( $points[0] + $points[3] + $points[6] + $points[9] ) / 4.0;
+ $faceCenter[1] = ( $points[1] + $points[4] + $points[7] + $points[10] ) / 4.0;
+ $faceCenter[2] = ( $points[2] + $points[5] + $points[8] + $points[11] ) / 4.0;
+ 
+ return $faceCenter;
+}
+
+/*
+* Return the parent reference of the currently selected component
+* @param: string ( component reference )
+* @return: float[] ( the face centre's point )
+*/
+proc string getParentFromComponent( string $objName )
+{
+ //finding parent of component selected
+ string $parent[] = `listRelatives -p $objName`;
+ 
+ if ( $parent[0] != "" )
+ {
+  $parent = `listRelatives -p $parent[0]`;
+  $parentObj = $parent[0];
+ }
+ 
+ return $parent[0];
+}
+
+/*
+* Return the parent reference of the currently selected component
+* @param: float[] ( point to check )
+* @return: int ( 1 = used,  0 = not used )
+*/
+proc int isUsedSpot( float $buildPoint[] )
+{
+ global float $buildPos[];
+
+ int $arrSize = size( $buildPos );
+ int $i;
+ int $usedSpot = 0;
+ 
+ for ( $i = 0; $i < $arrSize; $i+=2 )
+ {
+  if ( ($buildPos[$i] == $buildPoint[0]) && ($buildPos[$i+1] == $buildPoint[2]) )
+  {
+   $usedSpot = 1;
+   break;
+  }
+ }
+ 
+ return $usedSpot;
+}
+
+/*
+* Add the given point to array of "pieces can't go here" array
+* @param: float[] ( the point that will be added to global reference to signify that another build piece cannot be placed there )
+* @return: none
+*/
+proc addBuildPoint( float $buildPoint[] )
+{
+ global float $buildPos[];
+ 
+ int $arrSize = size( $buildPos );
+ 
+ $buildPos[ $arrSize ] = $buildPoint[0];
+ $buildPos[ $arrSize + 1 ] = $buildPoint[2];
+}
+
+/*
+* Return a unique string name suitable for a new namespace identifier
+* @return: string ( namespace name )
+*/
+proc string getNewNamespace()
+{
+ global int $nsCounter;
+ string $namespace_tmp = "Building_" + $nsCounter;
+ $nsCounter++;
+ 
+ return $namespace_tmp;
+}
